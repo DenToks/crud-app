@@ -25,11 +25,7 @@ function useLocalStorage(key, init) {
 }
 
 function initials(name) {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? '')
-    .join('')
+  return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 }
 
 function formatMoney(n) {
@@ -42,7 +38,7 @@ function formatDate(iso) {
 
 const AVATAR_COLORS = [
   '#7c3aed','#0891b2','#059669','#d97706','#dc2626',
-  '#7c3aed','#6366f1','#ec4899','#8b5cf6','#14b8a6',
+  '#6366f1','#ec4899','#8b5cf6','#14b8a6','#f59e0b',
 ]
 function avatarColor(name) {
   let h = 0
@@ -50,10 +46,74 @@ function avatarColor(name) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
 }
 
+const STEPS = [
+  {
+    num: '01',
+    icon: '＋',
+    title: 'Add an entry',
+    desc: 'Hit "+ Add Entry". Choose Money or Favor, set who owes who, and describe what it\'s for.',
+  },
+  {
+    num: '02',
+    icon: '⇄',
+    title: 'Track automatically',
+    desc: 'Your net balance updates instantly. See exactly how much you\'re owed vs. how much you owe.',
+  },
+  {
+    num: '03',
+    icon: '✓',
+    title: 'Settle up',
+    desc: 'Once a debt is repaid, hit the green ✓ button. It moves to your history — no data lost.',
+  },
+]
+
+function Onboarding({ onDone }) {
+  return (
+    <div className="onboarding-overlay">
+      <div className="onboarding-card">
+        <div className="ob-logo">
+          <div className="logo-icon">⇄</div>
+          <div>
+            <h1 className="ob-title">OWED</h1>
+            <span className="ob-sub">DEBT &amp; FAVORS TRACKER</span>
+          </div>
+        </div>
+
+        <p className="ob-tagline">
+          Stop forgetting who owes who.<br />
+          Track money <em>and</em> favors between friends — all in one place.
+        </p>
+
+        <div className="ob-steps">
+          {STEPS.map(s => (
+            <div className="ob-step" key={s.num}>
+              <div className="ob-step-num">{s.num}</div>
+              <div className="ob-step-icon">{s.icon}</div>
+              <h3 className="ob-step-title">{s.title}</h3>
+              <p className="ob-step-desc">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="ob-note">
+          💾 All data is saved in your browser. Nothing is sent anywhere.
+        </div>
+
+        <button className="btn-start" onClick={onDone}>
+          Start Tracking →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [entries, setEntries] = useLocalStorage('owed-entries', [])
+  const [onboarded, setOnboarded] = useLocalStorage('owed-onboarded', false)
+  const [showHelp, setShowHelp] = useState(false)
   const [filter, setFilter] = useState('outstanding')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [target, setTarget] = useState(null)
@@ -72,14 +132,16 @@ export default function App() {
   }, [entries])
 
   const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
     return entries.filter(e => {
       if (filter === 'outstanding' && e.status !== 'outstanding') return false
       if (filter === 'settled' && e.status !== 'settled') return false
       if (typeFilter === 'money' && e.type !== 'money') return false
       if (typeFilter === 'favor' && e.type !== 'favor') return false
+      if (q && !e.person.toLowerCase().includes(q) && !e.description.toLowerCase().includes(q)) return false
       return true
     })
-  }, [entries, filter, typeFilter])
+  }, [entries, filter, typeFilter, search])
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -88,13 +150,7 @@ export default function App() {
   }
 
   function openEdit(e) {
-    setForm({
-      person: e.person,
-      type: e.type,
-      direction: e.direction,
-      amount: e.amount ?? '',
-      description: e.description,
-    })
+    setForm({ person: e.person, type: e.type, direction: e.direction, amount: e.amount ?? '', description: e.description })
     setTarget(e)
     setModal('edit')
   }
@@ -159,11 +215,20 @@ export default function App() {
     closeModal()
   }
 
+  function handleClearSettled() {
+    setEntries(prev => prev.filter(e => e.status !== 'settled'))
+  }
+
+  const settledCount = entries.filter(e => e.status === 'settled').length
   const isFormValid = form.person.trim() && form.description.trim() &&
     (form.type === 'favor' || (form.amount && !isNaN(Number(form.amount)) && Number(form.amount) > 0))
 
+  if (!onboarded) {
+    return <Onboarding onDone={() => setOnboarded(true)} />
+  }
+
   return (
-    <div className="app" onKeyDown={e => e.key === 'Escape' && closeModal()}>
+    <div className="app" onKeyDown={e => e.key === 'Escape' && (modal ? closeModal() : setShowHelp(false))}>
 
       {/* ── Header ── */}
       <header className="header">
@@ -174,18 +239,21 @@ export default function App() {
             <span>DEBT TRACKER</span>
           </div>
         </div>
-        <button className="btn-add" onClick={openCreate}>+ Add Entry</button>
+        <div className="header-right">
+          <button className="btn-help" onClick={() => setShowHelp(true)} title="How to use">?</button>
+          <button className="btn-add" onClick={openCreate}>+ Add Entry</button>
+        </div>
       </header>
 
       {/* ── Balance Hero ── */}
       <div className="hero-section">
-        <div className={`net-balance ${stats.net >= 0 ? 'positive' : 'negative'}`}>
+        <div className={`net-balance ${stats.net > 0 ? 'positive' : stats.net < 0 ? 'negative' : 'neutral'}`}>
           <div className="net-label">Net Balance</div>
           <div className="net-amount">
-            {stats.net >= 0 ? '+' : ''}{formatMoney(stats.net)}
+            {stats.net > 0 ? '+' : ''}{formatMoney(stats.net)}
           </div>
           <div className="net-sub">
-            {stats.net >= 0 ? "You're ahead overall" : "You owe more than you're owed"}
+            {stats.net > 0 ? "You're ahead — people owe you more" : stats.net < 0 ? "You owe more than you're owed" : "All balanced out"}
           </div>
         </div>
 
@@ -209,19 +277,40 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
+      {/* ── Toolbar ── */}
       <div className="toolbar">
-        <div className="filter-group">
-          {[['outstanding','Outstanding'],['settled','Settled'],['all','All']].map(([v,l]) => (
-            <button key={v} className={`filter-tab${filter === v ? ' active' : ''}`} onClick={() => setFilter(v)}>{l}</button>
-          ))}
+        <div className="search-wrap">
+          <span className="search-icon">⌕</span>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search by name or description..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && <button className="search-clear" onClick={() => setSearch('')}>×</button>}
         </div>
-        <div className="filter-group">
-          {[['all','All Types'],['money','Money'],['favor','Favors']].map(([v,l]) => (
-            <button key={v} className={`filter-tab${typeFilter === v ? ' active' : ''}`} onClick={() => setTypeFilter(v)}>{l}</button>
-          ))}
+
+        <div className="toolbar-bottom">
+          <div className="filter-group">
+            {[['outstanding','Outstanding'],['settled','Settled'],['all','All']].map(([v,l]) => (
+              <button key={v} className={`filter-tab${filter === v ? ' active' : ''}`} onClick={() => setFilter(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="filter-group">
+            {[['all','All'],['money','Money'],['favor','Favors']].map(([v,l]) => (
+              <button key={v} className={`filter-tab${typeFilter === v ? ' active' : ''}`} onClick={() => setTypeFilter(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="toolbar-end">
+            <span className="count-badge">{filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'}</span>
+            {filter === 'settled' && settledCount > 0 && (
+              <button className="btn-clear-settled" onClick={handleClearSettled}>
+                Clear all settled
+              </button>
+            )}
+          </div>
         </div>
-        <span className="count-badge">{filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'}</span>
       </div>
 
       {/* ── List ── */}
@@ -229,8 +318,23 @@ export default function App() {
         {filtered.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">⇌</div>
-            <h3>{filter === 'settled' ? 'No settled entries yet' : 'All clear — no debts here'}</h3>
-            <p>{filter === 'outstanding' ? 'Add an entry to start tracking' : 'Change the filter to see more'}</p>
+            {search ? (
+              <>
+                <h3>No results for "{search}"</h3>
+                <p>Try searching a different name or description</p>
+              </>
+            ) : filter === 'settled' ? (
+              <>
+                <h3>No settled entries yet</h3>
+                <p>Settled debts will appear here</p>
+              </>
+            ) : (
+              <>
+                <h3>No debts tracked yet</h3>
+                <p>Hit "+ Add Entry" to log your first debt or favor</p>
+                <button className="btn-add-empty" onClick={openCreate}>+ Add your first entry</button>
+              </>
+            )}
           </div>
         ) : (
           filtered.map(entry => {
@@ -240,12 +344,10 @@ export default function App() {
 
             return (
               <div key={entry.id} className={`entry-card ${settled ? 'settled' : theyOweMe ? 'owed-to-me' : 'i-owe'}`}>
-                {/* Avatar */}
                 <div className="avatar" style={{ background: avatarColor(entry.person) }}>
                   {initials(entry.person)}
                 </div>
 
-                {/* Body */}
                 <div className="entry-body">
                   <div className="entry-top">
                     <span className="entry-person">{entry.person}</span>
@@ -265,19 +367,17 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Amount */}
                 {isMoney && (
                   <div className={`entry-amount ${settled ? '' : theyOweMe ? 'green' : 'red'}`}>
                     {theyOweMe ? '+' : '-'}{formatMoney(entry.amount)}
                   </div>
                 )}
 
-                {/* Actions */}
                 <div className="entry-actions">
                   {!settled ? (
                     <button className="btn-settle" onClick={() => handleSettle(entry.id)} title="Mark as settled">✓</button>
                   ) : (
-                    <button className="btn-unsettle" onClick={() => handleUnsettle(entry.id)} title="Mark as outstanding">↩</button>
+                    <button className="btn-unsettle" onClick={() => handleUnsettle(entry.id)} title="Reopen">↩</button>
                   )}
                   <button className="btn-icon" onClick={() => openEdit(entry)} title="Edit">✎</button>
                   <button className="btn-icon delete" onClick={() => openDelete(entry)} title="Delete">✕</button>
@@ -288,7 +388,36 @@ export default function App() {
         )}
       </div>
 
-      {/* ── Modal ── */}
+      {/* ── Help Modal ── */}
+      {showHelp && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setShowHelp(false)}>
+          <div className="modal help-modal">
+            <div className="modal-header">
+              <h2 className="modal-title">How to use OWED</h2>
+              <button className="btn-close" onClick={() => setShowHelp(false)}>×</button>
+            </div>
+            <div className="help-steps">
+              {STEPS.map(s => (
+                <div className="help-step" key={s.num}>
+                  <div className="help-step-icon">{s.icon}</div>
+                  <div>
+                    <div className="help-step-title">{s.title}</div>
+                    <div className="help-step-desc">{s.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="help-tips">
+              <div className="help-tip">💡 <strong>Green ✓</strong> = mark as settled. The entry stays in history.</div>
+              <div className="help-tip">💡 <strong>↩</strong> = reopen a settled entry if disputed.</div>
+              <div className="help-tip">💡 All data is saved in your browser — private and offline.</div>
+            </div>
+            <button className="btn-save" onClick={() => setShowHelp(false)}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CRUD Modal ── */}
       {modal && (
         <div className="overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div className="modal">
