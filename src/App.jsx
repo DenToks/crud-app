@@ -324,7 +324,9 @@ export default function App() {
       lines.push('')
     })
     lines.push(`Net balance: ${stats.net >= 0 ? '+' : ''}${fmt$(stats.net)}`)
-    navigator.clipboard.writeText(lines.join('\n')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+    navigator.clipboard.writeText(lines.join('\n'))
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+      .catch(() => alert('Could not copy — please allow clipboard access in your browser settings.'))
   }
 
   function toggleNotes(id) { setExpandedNotes(prev => ({ ...prev, [id]: !prev[id] })) }
@@ -350,7 +352,7 @@ export default function App() {
             {copied ? '✓ Copied!' : '⎘ Copy Summary'}
           </button>
           <button className="btn-help" data-tour="help-btn" onClick={() => setShowHelp(true)}>?</button>
-          <button className="btn-add" data-tour="add-btn" onClick={openCreate}>+ Add Entry</button>
+          <button className={`btn-add${!onboarded ? ' pulse' : ''}`} data-tour="add-btn" onClick={openCreate}>+ Add Entry</button>
         </div>
       </header>
 
