@@ -46,9 +46,9 @@ const TOUR_STEPS = [
     cta: 'Cool →',
   },
   {
-    target: 'people', placement: 'bottom',
+    target: null, placement: 'center',
     title: 'People Summary',
-    body: "See everyone you have a balance with at a glance. Click a person's chip to filter entries to just them.",
+    body: "Once you add entries, a 'People' row appears showing every person's running total at a glance. Tap a name to filter the list to just them — perfect for settling up one by one.",
     cta: 'Nice →',
   },
   {
