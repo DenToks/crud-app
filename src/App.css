@@ -321,6 +321,24 @@
 .person-chip.purple .person-chip-val { color: #a78bfa; }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   OVERDUE ALERT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+.overdue-alert {
+  margin-top: 10px;
+  padding: 7px 16px;
+  background: rgba(251,146,60,0.12);
+  border: 1px solid rgba(251,146,60,0.3);
+  border-radius: 20px;
+  font-size: 12px;
+  color: #fb923c;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-block;
+}
+.overdue-alert:hover { background: rgba(251,146,60,0.22); }
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    TOOLBAR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 .toolbar {
@@ -368,6 +386,7 @@
 }
 .filter-tab:hover { color: #e2e8f0; border-color: rgba(255,255,255,0.15); }
 .filter-tab.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.5); color: #818cf8; }
+.filter-tab.overdue-tab.active { background: rgba(251,146,60,0.15); border-color: rgba(251,146,60,0.4); color: #fb923c; }
 
 .sort-select {
   padding: 7px 12px; border-radius: 8px;
@@ -409,6 +428,8 @@
 .entry-card.i-owe:hover { border-color: rgba(239,68,68,0.35); }
 .entry-card.settled { border-color: rgba(255,255,255,0.05); opacity: 0.5; }
 .entry-card.settled:hover { opacity: 0.75; }
+.entry-card.is-overdue  { border-color: rgba(251,146,60,0.35) !important; }
+.entry-card.is-due-today { border-color: rgba(234,179,8,0.35) !important; }
 
 .avatar {
   width: 44px; height: 44px; border-radius: 50%;
@@ -433,7 +454,32 @@
 .type-chip { font-size: 11px; padding: 2px 8px; border-radius: 5px; background: rgba(99,102,241,0.12); color: #818cf8; font-weight: 600; }
 .type-chip.favor { background: rgba(124,58,237,0.12); color: #a78bfa; }
 
-.entry-date { font-size: 11px; color: #334155; }
+.cat-chip { font-size: 11px; padding: 2px 8px; border-radius: 5px; font-weight: 600; }
+
+/* Due date badges */
+.due-badge { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+.due-badge.overdue   { background: rgba(251,146,60,0.15); color: #fb923c; }
+.due-badge.due-today { background: rgba(234,179,8,0.15);  color: #facc15; }
+.due-badge.due-soon  { background: rgba(234,179,8,0.1);   color: #fbbf24; }
+.due-badge.due-normal { background: rgba(148,163,184,0.1); color: #64748b; }
+
+/* Notes */
+.notes-wrap { margin: 4px 0; }
+
+.notes-toggle {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 11px; color: #475569; padding: 0; transition: color 0.15s;
+}
+.notes-toggle:hover { color: #94a3b8; }
+
+.notes-text {
+  margin-top: 6px; font-size: 13px; color: #64748b; line-height: 1.6;
+  padding: 10px 12px; background: rgba(255,255,255,0.02);
+  border-left: 2px solid rgba(99,102,241,0.3); border-radius: 0 6px 6px 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.entry-date { font-size: 11px; color: #334155; cursor: default; }
 
 .settled-badge { font-size: 11px; color: #4ade80; background: rgba(34,197,94,0.1); padding: 2px 8px; border-radius: 5px; font-weight: 600; }
 
@@ -543,8 +589,22 @@
   transition: border-color 0.2s, background 0.2s;
 }
 .field input::placeholder { color: #334155; }
-.field input:focus, .field select:focus { border-color: rgba(99,102,241,0.5); background: rgba(255,255,255,0.06); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: rgba(99,102,241,0.5); background: rgba(255,255,255,0.06); }
 .field select option { background: #0f0f1a; color: #e2e8f0; }
+
+.field textarea {
+  padding: 10px 13px; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 9px;
+  color: #e2e8f0; font-size: 14px; font-family: inherit; outline: none;
+  resize: vertical; min-height: 72px; line-height: 1.6;
+  transition: border-color 0.2s, background 0.2s;
+}
+.field textarea::placeholder { color: #334155; }
+
+.label-opt { font-size: 10px; font-weight: 400; color: #334155; letter-spacing: 0; text-transform: none; }
+
+/* date input color fix */
+input[type="date"] { color-scheme: dark; }
 
 .direction-toggle { display: flex; gap: 8px; }
 

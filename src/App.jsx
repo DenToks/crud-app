@@ -1,57 +1,64 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import './App.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const EMPTY_FORM = { person: '', type: 'money', direction: 'they-owe-me', amount: '', description: '' }
+const EMPTY_FORM = {
+  person: '', type: 'money', direction: 'they-owe-me',
+  amount: '', description: '', category: '', dueDate: '', notes: '',
+}
+
+const CATEGORIES = ['Rent', 'Food', 'Transport', 'Entertainment', 'Bills', 'Other']
+
+const CAT_STYLE = {
+  Rent:          { bg: 'rgba(99,102,241,0.13)',  color: '#818cf8' },
+  Food:          { bg: 'rgba(234,179,8,0.13)',   color: '#facc15' },
+  Transport:     { bg: 'rgba(6,182,212,0.13)',   color: '#22d3ee' },
+  Entertainment: { bg: 'rgba(236,72,153,0.13)',  color: '#f472b6' },
+  Bills:         { bg: 'rgba(239,68,68,0.13)',   color: '#f87171' },
+  Other:         { bg: 'rgba(148,163,184,0.13)', color: '#94a3b8' },
+}
 
 const TOUR_STEPS = [
   {
-    target: null,
-    placement: 'center',
+    target: null, placement: 'center',
     title: 'Welcome to OWED 👋',
-    body: 'The smartest way to track money and favors between friends — so you always know exactly who owes who. Let me walk you through it.',
+    body: 'Track money and favors between friends — so you always know exactly who owes who. Let me walk you through it.',
     cta: "Let's go →",
   },
   {
-    target: 'hero',
-    placement: 'bottom',
+    target: 'hero', placement: 'bottom',
     title: 'Your Dashboard',
-    body: 'The big number is your net balance — how much you\'re owed minus what you owe. The four cards below break it down further. Everything updates live.',
+    body: "The big number is your net balance — how much you're owed minus what you owe. The four cards break it down. Updates live.",
     cta: 'Got it →',
   },
   {
-    target: 'add-btn',
-    placement: 'bottom-left',
+    target: 'add-btn', placement: 'bottom-left',
     title: 'Add a Debt or Favor',
-    body: 'This button logs a new entry. You can track cash AND non-monetary favors — like someone helping you move or covering your dinner tab.',
+    body: "Log cash debts AND non-monetary favors. Set a due date and category so nothing falls through the cracks.",
     cta: 'Makes sense →',
     pulse: true,
   },
   {
-    target: 'toolbar',
-    placement: 'bottom',
+    target: 'toolbar', placement: 'bottom',
     title: 'Filter, Sort & Search',
-    body: 'Filter by Outstanding or Settled, filter by Money or Favors, sort by date or amount, and search by name or description — all right here.',
+    body: 'Filter by Outstanding, Overdue, or Settled. Filter by category. Sort by date, amount, or name. Search by anything.',
     cta: 'Cool →',
   },
   {
-    target: 'people',
-    placement: 'bottom',
+    target: 'people', placement: 'bottom',
     title: 'People Summary',
-    body: 'Every person you have a balance with appears here. Click their card to filter entries to just that person. Great for settling up one-by-one.',
+    body: "See everyone you have a balance with at a glance. Click a person's chip to filter entries to just them.",
     cta: 'Nice →',
   },
   {
-    target: 'help-btn',
-    placement: 'bottom-left',
+    target: 'help-btn', placement: 'bottom-left',
     title: 'Help is Always Here',
-    body: 'Tap "?" any time to replay this tour or review how things work. Nothing gets buried.',
+    body: 'Tap "?" any time to replay this tour or review how things work.',
     cta: 'One more →',
   },
   {
-    target: null,
-    placement: 'center',
+    target: null, placement: 'center',
     title: "You're all set! 🎉",
     body: 'All data is saved privately in your browser — nothing is sent anywhere. Start by logging your first entry.',
     cta: 'Start Tracking',
@@ -78,6 +85,33 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+function relativeDate(iso) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins  = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days  = Math.floor(diff / 86400000)
+  const weeks = Math.floor(days / 7)
+  const months = Math.floor(days / 30)
+  if (mins  < 1)  return 'just now'
+  if (mins  < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days  < 7)  return `${days}d ago`
+  if (weeks < 5)  return `${weeks}w ago`
+  if (months < 12) return `${months}mo ago`
+  return fmtDate(iso)
+}
+
+function dueStatus(dueDateStr, settled) {
+  if (!dueDateStr || settled) return null
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const due = new Date(dueDateStr); due.setHours(0, 0, 0, 0)
+  const diff = Math.round((due - now) / 86400000)
+  if (diff < 0)  return { label: `Overdue by ${Math.abs(diff)}d`, cls: 'overdue' }
+  if (diff === 0) return { label: 'Due today', cls: 'due-today' }
+  if (diff <= 3)  return { label: `Due in ${diff}d`, cls: 'due-soon' }
+  return { label: `Due ${fmtDate(dueDateStr)}`, cls: 'due-normal' }
+}
+
 const AV_COLORS = ['#7c3aed','#0891b2','#059669','#d97706','#dc2626','#6366f1','#ec4899','#8b5cf6','#14b8a6','#f59e0b']
 function avColor(name) {
   let h = 0
@@ -85,7 +119,7 @@ function avColor(name) {
   return AV_COLORS[Math.abs(h) % AV_COLORS.length]
 }
 
-// ── Tour Component ────────────────────────────────────────────────────────────
+// ── Tour ─────────────────────────────────────────────────────────────────────
 
 const SPOT_PAD = 10
 
@@ -105,49 +139,26 @@ function Tour({ onDone }) {
       setArrowDir('')
       return
     }
-
     const el = document.querySelector(`[data-tour="${current.target}"]`)
-    if (!el) {
-      setSpot(null)
-      setTipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' })
-      setArrowDir('')
-      return
-    }
+    if (!el) { setSpot(null); setTipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }); setArrowDir(''); return }
 
     const r = el.getBoundingClientRect()
     const P = SPOT_PAD
     setSpot({ top: r.top - P, left: r.left - P, width: r.width + P * 2, height: r.height + P * 2 })
 
-    const TW = 320
-    const GAP = 16
-    const vw = window.innerWidth
+    const TW = 320; const GAP = 16; const vw = window.innerWidth
 
     if (current.placement === 'bottom') {
-      setTipStyle({
-        position: 'fixed',
-        top: r.bottom + P + GAP,
-        left: Math.max(16, Math.min(r.left + r.width / 2 - TW / 2, vw - TW - 16)),
-        width: TW,
-      })
+      setTipStyle({ position: 'fixed', top: r.bottom + P + GAP, left: Math.max(16, Math.min(r.left + r.width / 2 - TW / 2, vw - TW - 16)), width: TW })
       setArrowDir('arrow-up')
     } else if (current.placement === 'bottom-left') {
-      setTipStyle({
-        position: 'fixed',
-        top: r.bottom + P + GAP,
-        right: Math.max(16, vw - r.right - P),
-        width: TW,
-      })
+      setTipStyle({ position: 'fixed', top: r.bottom + P + GAP, right: Math.max(16, vw - r.right - P), width: TW })
       setArrowDir('arrow-up-right')
     }
   }, [step, current])
 
   useEffect(() => {
-    if (!current.target) {
-      setSpot(null)
-      setTipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' })
-      setArrowDir('')
-      return
-    }
+    if (!current.target) { setSpot(null); setTipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }); setArrowDir(''); return }
     const el = document.querySelector(`[data-tour="${current.target}"]`)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
     const t = setTimeout(calcLayout, 380)
@@ -159,32 +170,19 @@ function Tour({ onDone }) {
     return () => window.removeEventListener('resize', calcLayout)
   }, [calcLayout])
 
-  function advance() {
-    if (isLast) onDone()
-    else setStep(s => s + 1)
-  }
+  function advance() { isLast ? onDone() : setStep(s => s + 1) }
 
   return (
     <>
-      {/* Click-blocking overlay */}
       <div className="tour-block" />
-
-      {/* Spotlight cutout */}
       {spot && <div className="tour-spot" style={spot} />}
-
-      {/* Tooltip */}
-      <div
-        className={`tour-tip ${arrowDir}`}
-        style={{ position: 'fixed', zIndex: 10002, ...tipStyle }}
-      >
+      <div className={`tour-tip ${arrowDir}`} style={{ position: 'fixed', zIndex: 10002, ...tipStyle }}>
         <div className="tour-tip-top">
           <span className="tour-count">{step + 1} of {TOUR_STEPS.length}</span>
           <button className="tour-skip" onClick={onDone}>Skip</button>
         </div>
-
         <h3 className="tour-tip-title">{current.title}</h3>
         <p className="tour-tip-body">{current.body}</p>
-
         <div className="tour-tip-bottom">
           <div className="tour-dots">
             {TOUR_STEPS.map((_, i) => (
@@ -206,6 +204,7 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [filter, setFilter] = useState('outstanding')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [catFilter, setCatFilter] = useState('all')
   const [sort, setSort] = useState('newest')
   const [search, setSearch] = useState('')
   const [personFilter, setPersonFilter] = useState(null)
@@ -213,15 +212,17 @@ export default function App() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [target, setTarget] = useState(null)
   const [copied, setCopied] = useState(false)
+  const [expandedNotes, setExpandedNotes] = useState({})
 
   // ── Stats ──
   const stats = useMemo(() => {
     const out = entries.filter(e => e.status === 'outstanding')
-    const owedToMe = out.filter(e => e.direction === 'they-owe-me' && e.type === 'money').reduce((s, e) => s + Number(e.amount), 0)
-    const iOwe = out.filter(e => e.direction === 'i-owe-them' && e.type === 'money').reduce((s, e) => s + Number(e.amount), 0)
-    const favorsOwed = out.filter(e => e.type === 'favor' && e.direction === 'they-owe-me').length
-    const iOweFavors = out.filter(e => e.type === 'favor' && e.direction === 'i-owe-them').length
-    return { owedToMe, iOwe, net: owedToMe - iOwe, favorsOwed, iOweFavors }
+    const owedToMe  = out.filter(e => e.direction === 'they-owe-me' && e.type === 'money').reduce((s, e) => s + Number(e.amount), 0)
+    const iOwe      = out.filter(e => e.direction === 'i-owe-them'  && e.type === 'money').reduce((s, e) => s + Number(e.amount), 0)
+    const favorsOwed  = out.filter(e => e.type === 'favor' && e.direction === 'they-owe-me').length
+    const iOweFavors  = out.filter(e => e.type === 'favor' && e.direction === 'i-owe-them').length
+    const overdue = out.filter(e => e.dueDate && new Date(e.dueDate) < new Date()).length
+    return { owedToMe, iOwe, net: owedToMe - iOwe, favorsOwed, iOweFavors, overdue }
   }, [entries])
 
   // ── People summary ──
@@ -230,40 +231,46 @@ export default function App() {
     const map = {}
     out.forEach(e => {
       if (!map[e.person]) map[e.person] = { name: e.person, money: 0, favors: 0 }
-      if (e.type === 'money') {
-        map[e.person].money += e.direction === 'they-owe-me' ? Number(e.amount) : -Number(e.amount)
-      } else {
-        map[e.person].favors += e.direction === 'they-owe-me' ? 1 : -1
-      }
+      if (e.type === 'money') map[e.person].money += e.direction === 'they-owe-me' ? Number(e.amount) : -Number(e.amount)
+      else map[e.person].favors += e.direction === 'they-owe-me' ? 1 : -1
     })
     return Object.values(map).sort((a, b) => Math.abs(b.money) - Math.abs(a.money))
   }, [entries])
 
-  // ── Filtered + sorted list ──
+  // ── Filtered + sorted ──
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
+    const now = new Date()
     let list = entries.filter(e => {
       if (filter === 'outstanding' && e.status !== 'outstanding') return false
-      if (filter === 'settled' && e.status !== 'settled') return false
-      if (typeFilter === 'money' && e.type !== 'money') return false
-      if (typeFilter === 'favor' && e.type !== 'favor') return false
+      if (filter === 'settled'     && e.status !== 'settled')     return false
+      if (filter === 'overdue'     && !(e.status === 'outstanding' && e.dueDate && new Date(e.dueDate) < now)) return false
+      if (typeFilter === 'money'  && e.type !== 'money')  return false
+      if (typeFilter === 'favor'  && e.type !== 'favor')  return false
+      if (catFilter !== 'all'     && e.category !== catFilter) return false
       if (personFilter && e.person !== personFilter) return false
-      if (q && !e.person.toLowerCase().includes(q) && !e.description.toLowerCase().includes(q)) return false
+      if (q && !e.person.toLowerCase().includes(q) && !e.description.toLowerCase().includes(q) && !e.notes?.toLowerCase().includes(q)) return false
       return true
     })
     list = [...list]
-    if (sort === 'newest')  list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    if (sort === 'oldest')  list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    if (sort === 'newest')    list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    if (sort === 'oldest')    list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     if (sort === 'amount-hi') list.sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
     if (sort === 'amount-lo') list.sort((a, b) => (a.amount ?? 0) - (b.amount ?? 0))
-    if (sort === 'name')    list.sort((a, b) => a.person.localeCompare(b.person))
+    if (sort === 'name')      list.sort((a, b) => a.person.localeCompare(b.person))
+    if (sort === 'due')       list.sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0
+      if (!a.dueDate) return 1
+      if (!b.dueDate) return -1
+      return new Date(a.dueDate) - new Date(b.dueDate)
+    })
     return list
-  }, [entries, filter, typeFilter, sort, search, personFilter])
+  }, [entries, filter, typeFilter, catFilter, sort, search, personFilter])
 
   // ── Handlers ──
   function openCreate() { setForm(EMPTY_FORM); setTarget(null); setModal('create') }
   function openEdit(e) {
-    setForm({ person: e.person, type: e.type, direction: e.direction, amount: e.amount ?? '', description: e.description })
+    setForm({ person: e.person, type: e.type, direction: e.direction, amount: e.amount ?? '', description: e.description, category: e.category ?? '', dueDate: e.dueDate ?? '', notes: e.notes ?? '' })
     setTarget(e); setModal('edit')
   }
   function openDelete(e) { setTarget(e); setModal('delete') }
@@ -275,15 +282,16 @@ export default function App() {
     if (!valid) return
     if (modal === 'create') {
       setEntries(prev => [{
-        id: crypto.randomUUID(), person: form.person.trim(), type: form.type,
-        direction: form.direction, amount: form.type === 'money' ? Number(form.amount) : null,
-        description: form.description.trim(), status: 'outstanding',
-        createdAt: new Date().toISOString(), settledAt: null,
+        id: crypto.randomUUID(), person: form.person.trim(), type: form.type, direction: form.direction,
+        amount: form.type === 'money' ? Number(form.amount) : null, description: form.description.trim(),
+        category: form.category || null, dueDate: form.dueDate || null, notes: form.notes.trim() || null,
+        status: 'outstanding', createdAt: new Date().toISOString(), settledAt: null,
       }, ...prev])
     } else {
       setEntries(prev => prev.map(e => e.id === target.id ? {
         ...e, person: form.person.trim(), type: form.type, direction: form.direction,
         amount: form.type === 'money' ? Number(form.amount) : null, description: form.description.trim(),
+        category: form.category || null, dueDate: form.dueDate || null, notes: form.notes.trim() || null,
       } : e))
     }
     closeModal()
@@ -307,18 +315,18 @@ export default function App() {
     Object.entries(byPerson).forEach(([person, list]) => {
       lines.push(`${person}:`)
       list.forEach(e => {
-        const who = e.direction === 'they-owe-me' ? 'owes you' : 'you owe'
+        const who  = e.direction === 'they-owe-me' ? 'owes you' : 'you owe'
         const what = e.type === 'money' ? fmt$(e.amount) : 'a favor'
-        lines.push(`  • ${who} ${what} — ${e.description}`)
+        const due  = e.dueDate ? ` (due ${fmtDate(e.dueDate)})` : ''
+        lines.push(`  • ${who} ${what} — ${e.description}${due}`)
       })
       lines.push('')
     })
     lines.push(`Net balance: ${stats.net >= 0 ? '+' : ''}${fmt$(stats.net)}`)
-    navigator.clipboard.writeText(lines.join('\n')).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+    navigator.clipboard.writeText(lines.join('\n')).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
   }
+
+  function toggleNotes(id) { setExpandedNotes(prev => ({ ...prev, [id]: !prev[id] })) }
 
   const settledCount = entries.filter(e => e.status === 'settled').length
   const isFormValid = form.person.trim() && form.description.trim() &&
@@ -327,33 +335,25 @@ export default function App() {
   return (
     <div className="app" onKeyDown={e => e.key === 'Escape' && (modal ? closeModal() : setShowHelp(false))}>
 
-      {/* ── Guided Tour ── */}
       {!onboarded && <Tour onDone={() => setOnboarded(true)} />}
 
       {/* ── Header ── */}
       <header className="header">
         <div className="logo">
           <div className="logo-icon">⇄</div>
-          <div>
-            <h1>OWED</h1>
-            <span>DEBT TRACKER</span>
-          </div>
+          <div><h1>OWED</h1><span>DEBT TRACKER</span></div>
         </div>
         <div className="header-right">
-          <button
-            className={`btn-copy ${copied ? 'copied' : ''}`}
-            onClick={handleCopySummary}
-            title="Copy summary to clipboard"
-            disabled={!entries.filter(e => e.status === 'outstanding').length}
-          >
+          <button className={`btn-copy${copied ? ' copied' : ''}`} onClick={handleCopySummary}
+            title="Copy summary" disabled={!entries.filter(e => e.status === 'outstanding').length}>
             {copied ? '✓ Copied!' : '⎘ Copy Summary'}
           </button>
-          <button className="btn-help" data-tour="help-btn" onClick={() => setShowHelp(true)} title="How to use">?</button>
+          <button className="btn-help" data-tour="help-btn" onClick={() => setShowHelp(true)}>?</button>
           <button className="btn-add" data-tour="add-btn" onClick={openCreate}>+ Add Entry</button>
         </div>
       </header>
 
-      {/* ── Hero / Balance ── */}
+      {/* ── Hero ── */}
       <div className="hero-section" data-tour="hero">
         <div className={`net-balance ${stats.net > 0 ? 'positive' : stats.net < 0 ? 'negative' : 'neutral'}`}>
           <div className="net-label">Net Balance</div>
@@ -361,6 +361,11 @@ export default function App() {
           <div className="net-sub">
             {stats.net > 0 ? "You're owed more than you owe" : stats.net < 0 ? "You owe more than you're owed" : "All balanced out"}
           </div>
+          {stats.overdue > 0 && (
+            <div className="overdue-alert" onClick={() => setFilter('overdue')}>
+              ⚠ {stats.overdue} overdue entr{stats.overdue === 1 ? 'y' : 'ies'} — tap to view
+            </div>
+          )}
         </div>
         <div className="stats-row">
           <div className="stat-card green"><div className="stat-value">{fmt$(stats.owedToMe)}</div><div className="stat-label">Owed to you</div></div>
@@ -375,25 +380,21 @@ export default function App() {
         <div className="people-section" data-tour="people">
           <div className="people-header">
             <span className="people-title">People</span>
-            {personFilter && (
-              <button className="people-clear" onClick={() => setPersonFilter(null)}>
-                × Clear filter
-              </button>
-            )}
+            {personFilter && <button className="people-clear" onClick={() => setPersonFilter(null)}>× Clear</button>}
           </div>
           <div className="people-row">
             {people.map(p => (
               <button
                 key={p.name}
-                className={`person-chip ${personFilter === p.name ? 'active' : ''} ${p.money > 0 ? 'green' : p.money < 0 ? 'red' : 'purple'}`}
+                className={`person-chip${personFilter === p.name ? ' active' : ''} ${p.money > 0 ? 'green' : p.money < 0 ? 'red' : 'purple'}`}
                 onClick={() => setPersonFilter(prev => prev === p.name ? null : p.name)}
               >
                 <div className="person-chip-av" style={{ background: avColor(p.name) }}>{initials(p.name)}</div>
                 <div className="person-chip-info">
                   <span className="person-chip-name">{p.name}</span>
                   <span className="person-chip-val">
-                    {p.type !== 'favor' && p.money !== 0 && `${p.money > 0 ? '+' : ''}${fmt$(p.money)}`}
-                    {p.favors !== 0 && ` ${p.favors > 0 ? '+' : ''}${Math.abs(p.favors)} favor${Math.abs(p.favors) > 1 ? 's' : ''}`}
+                    {p.money !== 0 && `${p.money > 0 ? '+' : ''}${fmt$(p.money)}`}
+                    {p.favors !== 0 && ` ${p.favors > 0 ? '+' : ''}${Math.abs(p.favors)}f`}
                   </span>
                 </div>
               </button>
@@ -404,21 +405,17 @@ export default function App() {
 
       {/* ── Toolbar ── */}
       <div className="toolbar" data-tour="toolbar">
-        <div className="search-wrap" data-tour="search">
+        <div className="search-wrap">
           <span className="search-icon">⌕</span>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Search by name or description..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+          <input className="search-input" type="text" placeholder="Search by name, description, or notes..."
+            value={search} onChange={e => setSearch(e.target.value)} />
           {search && <button className="search-clear" onClick={() => setSearch('')}>×</button>}
         </div>
+
         <div className="toolbar-controls">
           <div className="filter-group">
-            {[['outstanding','Outstanding'],['settled','Settled'],['all','All']].map(([v, l]) => (
-              <button key={v} className={`filter-tab${filter === v ? ' active' : ''}`} onClick={() => setFilter(v)}>{l}</button>
+            {[['outstanding','Outstanding'],['overdue','Overdue' + (stats.overdue > 0 ? ` (${stats.overdue})` : '')],['settled','Settled'],['all','All']].map(([v, l]) => (
+              <button key={v} className={`filter-tab${filter === v ? ' active' : ''}${v === 'overdue' ? ' overdue-tab' : ''}`} onClick={() => setFilter(v)}>{l}</button>
             ))}
           </div>
           <div className="filter-group">
@@ -426,13 +423,21 @@ export default function App() {
               <button key={v} className={`filter-tab${typeFilter === v ? ' active' : ''}`} onClick={() => setTypeFilter(v)}>{l}</button>
             ))}
           </div>
+
+          <select className="sort-select" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
+            <option value="all">All Categories</option>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
           <select className="sort-select" value={sort} onChange={e => setSort(e.target.value)}>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
+            <option value="due">Due date</option>
             <option value="amount-hi">Amount: high → low</option>
             <option value="amount-lo">Amount: low → high</option>
             <option value="name">Name: A → Z</option>
           </select>
+
           <div className="toolbar-end">
             <span className="count-badge">{filtered.length} entr{filtered.length === 1 ? 'y' : 'ies'}</span>
             {filter === 'settled' && settledCount > 0 && (
@@ -447,39 +452,68 @@ export default function App() {
         {filtered.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">⇌</div>
-            {search || personFilter ? (
-              <><h3>No results found</h3><p>Try adjusting your search or filters</p></>
+            {search || personFilter || catFilter !== 'all' ? (
+              <><h3>No results found</h3><p>Try adjusting your filters</p></>
+            ) : filter === 'overdue' ? (
+              <><h3>No overdue entries</h3><p>Nice — everything is on time</p></>
             ) : filter === 'settled' ? (
-              <><h3>No settled entries yet</h3><p>Settled debts will appear here</p></>
+              <><h3>No settled entries yet</h3><p>Settled debts appear here</p></>
             ) : (
-              <><h3>No debts tracked yet</h3><p>Hit "+ Add Entry" to log your first debt or favor</p>
+              <><h3>No debts tracked yet</h3><p>Hit "+ Add Entry" to get started</p>
                 <button className="btn-add-empty" onClick={openCreate}>+ Add your first entry</button></>
             )}
           </div>
         ) : filtered.map(entry => {
-          const isMoney = entry.type === 'money'
-          const theyOweMe = entry.direction === 'they-owe-me'
-          const settled = entry.status === 'settled'
+          const isMoney    = entry.type === 'money'
+          const theyOweMe  = entry.direction === 'they-owe-me'
+          const settled    = entry.status === 'settled'
+          const due        = dueStatus(entry.dueDate, settled)
+          const catStyle   = entry.category ? CAT_STYLE[entry.category] : null
+          const hasNotes   = entry.notes && entry.notes.trim()
+          const notesOpen  = expandedNotes[entry.id]
+
           return (
-            <div key={entry.id} className={`entry-card ${settled ? 'settled' : theyOweMe ? 'owed-to-me' : 'i-owe'}`}>
+            <div key={entry.id}
+              className={`entry-card ${settled ? 'settled' : theyOweMe ? 'owed-to-me' : 'i-owe'}${due?.cls === 'overdue' ? ' is-overdue' : due?.cls === 'due-today' ? ' is-due-today' : ''}`}
+            >
               <div className="avatar" style={{ background: avColor(entry.person) }}>{initials(entry.person)}</div>
+
               <div className="entry-body">
                 <div className="entry-top">
                   <span className="entry-person">{entry.person}</span>
                   <span className={`dir-badge ${theyOweMe ? 'green' : 'red'}`}>{theyOweMe ? '← owes you' : '→ you owe'}</span>
+                  {due && <span className={`due-badge ${due.cls}`}>{due.label}</span>}
                 </div>
+
                 <div className="entry-desc">{entry.description}</div>
+
+                {hasNotes && (
+                  <div className="notes-wrap">
+                    <button className="notes-toggle" onClick={() => toggleNotes(entry.id)}>
+                      {notesOpen ? '▲ Hide note' : '▼ Note'}
+                    </button>
+                    {notesOpen && <div className="notes-text">{entry.notes}</div>}
+                  </div>
+                )}
+
                 <div className="entry-meta">
                   <span className={`type-chip${isMoney ? '' : ' favor'}`}>{isMoney ? '💵 Money' : '🤝 Favor'}</span>
-                  <span className="entry-date">{fmtDate(entry.createdAt)}</span>
-                  {settled && entry.settledAt && <span className="settled-badge">✓ Settled {fmtDate(entry.settledAt)}</span>}
+                  {catStyle && (
+                    <span className="cat-chip" style={{ background: catStyle.bg, color: catStyle.color }}>
+                      {entry.category}
+                    </span>
+                  )}
+                  <span className="entry-date" title={fmtDate(entry.createdAt)}>{relativeDate(entry.createdAt)}</span>
+                  {settled && entry.settledAt && <span className="settled-badge">✓ Settled {relativeDate(entry.settledAt)}</span>}
                 </div>
               </div>
+
               {isMoney && (
-                <div className={`entry-amount ${settled ? '' : theyOweMe ? 'green' : 'red'}`}>
+                <div className={`entry-amount${settled ? '' : theyOweMe ? ' green' : ' red'}`}>
                   {theyOweMe ? '+' : '-'}{fmt$(entry.amount)}
                 </div>
               )}
+
               <div className="entry-actions">
                 {!settled
                   ? <button className="btn-settle" onClick={() => handleSettle(entry.id)} title="Mark settled">✓</button>
@@ -503,11 +537,11 @@ export default function App() {
             </div>
             <div className="help-steps">
               {[
-                { icon: '＋', title: 'Add an entry', desc: 'Click "+ Add Entry". Choose Money or Favor, set direction, fill the details.' },
-                { icon: '⇄', title: 'Net balance updates live', desc: 'The big number at the top always reflects your current position.' },
-                { icon: '✓', title: 'Settle up', desc: 'Hit the green ✓ on any card when a debt is repaid. History is preserved.' },
-                { icon: '↩', title: 'Reopen if disputed', desc: 'Use ↩ to move a settled entry back to outstanding.' },
-                { icon: '⎘', title: 'Copy summary', desc: 'Use "Copy Summary" in the header to share a text breakdown via message.' },
+                { icon: '＋', title: 'Add an entry', desc: 'Click "+ Add Entry". Set person, type, direction, amount, category, due date, and optional notes.' },
+                { icon: '⚠', title: 'Due dates', desc: 'Set a due date when adding. Entries show Overdue, Due today, or Due in Xd badges. Filter by Overdue tab.' },
+                { icon: '✓', title: 'Settle up', desc: 'Hit ✓ on any card when paid. Entry moves to history with a settled date.' },
+                { icon: '↩', title: 'Reopen if disputed', desc: 'Use ↩ to bring a settled entry back to outstanding.' },
+                { icon: '⎘', title: 'Copy summary', desc: 'Copies a formatted text breakdown of all outstanding debts to paste in a message.' },
               ].map(s => (
                 <div className="help-step" key={s.title}>
                   <div className="help-step-icon">{s.icon}</div>
@@ -526,9 +560,7 @@ export default function App() {
           <div className="modal">
             <div className="modal-header">
               <h2 className="modal-title">
-                {modal === 'create' && 'New Entry'}
-                {modal === 'edit' && 'Edit Entry'}
-                {modal === 'delete' && 'Delete Entry'}
+                {modal === 'create' ? 'New Entry' : modal === 'edit' ? 'Edit Entry' : 'Delete Entry'}
               </h2>
               <button className="btn-close" onClick={closeModal}>×</button>
             </div>
@@ -559,16 +591,10 @@ export default function App() {
                 </div>
 
                 <div className="direction-toggle">
-                  <button type="button"
-                    className={`dir-btn${form.direction === 'they-owe-me' ? ' active green' : ''}`}
-                    onClick={() => setForm(f => ({ ...f, direction: 'they-owe-me' }))}>
-                    ← They owe me
-                  </button>
-                  <button type="button"
-                    className={`dir-btn${form.direction === 'i-owe-them' ? ' active red' : ''}`}
-                    onClick={() => setForm(f => ({ ...f, direction: 'i-owe-them' }))}>
-                    → I owe them
-                  </button>
+                  <button type="button" className={`dir-btn${form.direction === 'they-owe-me' ? ' active green' : ''}`}
+                    onClick={() => setForm(f => ({ ...f, direction: 'they-owe-me' }))}>← They owe me</button>
+                  <button type="button" className={`dir-btn${form.direction === 'i-owe-them' ? ' active red' : ''}`}
+                    onClick={() => setForm(f => ({ ...f, direction: 'i-owe-them' }))}>→ I owe them</button>
                 </div>
 
                 {form.type === 'money' && (
@@ -582,9 +608,29 @@ export default function App() {
                 <div className="field">
                   <label>What for?</label>
                   <input type="text"
-                    placeholder={form.type === 'money' ? 'Dinner, concert tickets...' : 'Help moving, driving to airport...'}
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                    placeholder={form.type === 'money' ? 'Dinner, concert tickets, rent...' : 'Help moving, ride to airport...'}
+                    value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                </div>
+
+                <div className="form-row">
+                  <div className="field">
+                    <label>Category <span className="label-opt">(optional)</span></label>
+                    <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                      <option value="">— None —</option>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Due Date <span className="label-opt">(optional)</span></label>
+                    <input type="date" value={form.dueDate}
+                      onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>Notes <span className="label-opt">(optional)</span></label>
+                  <textarea placeholder="Any extra context..." value={form.notes} rows={3}
+                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
                 </div>
 
                 <div className="form-actions">
