@@ -155,15 +155,16 @@ function Tour({ onDone }) {
       setTipStyle({ position: 'fixed', top: r.bottom + P + GAP, right: Math.max(16, vw - r.right - P), width: TW })
       setArrowDir('arrow-up-right')
     }
-  }, [step, current])
+  }, [current])
 
   useEffect(() => {
-    if (!current.target) { setSpot(null); setTipStyle({ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }); setArrowDir(''); return }
-    const el = document.querySelector(`[data-tour="${current.target}"]`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (current.target) {
+      const el = document.querySelector(`[data-tour="${current.target}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
     const t = setTimeout(calcLayout, 380)
     return () => clearTimeout(t)
-  }, [step])
+  }, [step, calcLayout, current.target])
 
   useEffect(() => {
     window.addEventListener('resize', calcLayout)
